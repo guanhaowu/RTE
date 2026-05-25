@@ -28,8 +28,12 @@
 
     <div class="col-6 min-w-0">
         <div dir="@GetDirection(_selectedLanguage)">
-            <RichTextEditor @bind-Value="_content"
-                            Options="@_editorOptions"/>
+            @if (_editorOptions is not null)
+            {
+                <RichTextEditor @key="_selectedLanguage"
+                    @bind-Value="_content"
+                                Options="@_editorOptions"/>
+            }
         </div>
     </div>
 
@@ -49,12 +53,13 @@
     private sealed record EditorLanguage(string Code, string DisplayName);
 
     private IReadOnlyList<EditorLanguage> _availableLanguages = [];
-    private RichTextEditorOptions _editorOptions { get; set; }
+    private RichTextEditorOptions? _editorOptions;
 
     protected override void OnAfterRender(bool firstRender)
     {
         Console.WriteLine("Rendered...");
-        if(!firstRender) return;
+        Console.WriteLine(_editorOptions is not null);
+        if (!firstRender && _editorOptions is not null) return;
         _availableLanguages = GetAvailableLanguages();
         _selectedLanguage = _availableLanguages.Any(lang => lang.Code == "nl") ? "nl" : "en";
 
@@ -340,4 +345,5 @@
     {
         return IsRightToLeftLanguage(language) ? "rtl" : "ltr";
     }
+
 }

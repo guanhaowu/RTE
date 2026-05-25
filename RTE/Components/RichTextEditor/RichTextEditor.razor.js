@@ -1,6 +1,9 @@
 ﻿export async function init(elementId, value, config, dotNetReference) {
-    destroy(elementId);
+    if(document.getElementById(elementId)) {
+        destroy(elementId);
+    }
 
+    console.log("initializing editor for element", elementId)
     hugerte.init({
         selector: `#${elementId}`,
         base_url: "/lib/HugeRTE",
@@ -36,6 +39,7 @@ export function destroy(elementId) {
     const editor = hugerte.get(elementId);
 
     if (editor) {
+        console.log("deleting element")
         editor.remove();
     }
 }
