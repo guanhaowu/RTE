@@ -1,0 +1,57 @@
+﻿@inherits InputBase<string>
+@implements IAsyncDisposable
+
+@inject IJSRuntime JsRuntime
+
+
+<div class="rich_text_editor_container w-100">
+    <textarea id="@_editorId"></textarea>
+</div>
+
+@code{
+    private readonly string _editorId = $"editor_{Guid.NewGuid().ToString()}";
+
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<RichTextEditor>? _dotNetObjectReference;
+
+    [Parameter] public RichTextEditorOptions Options { get; set; } = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        var config = RichTextEditorOptionsMapper.ToHugeRteConfig(Options);
+
+        _module = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./Components/RichTextEditor/RichTextEditor.razor.js");
+        _dotNetObjectReference = DotNetObjectReference.Create(this);
+
+        await _module.InvokeVoidAsync("init", _editorId, CurrentValue, config, _dotNetObjectReference);
+        Console.WriteLine("Initialized");
+    }
+
+    [JSInvokable]
+    public Task SetValueFromJs(string value)
+    {
+        CurrentValue = value;
+        return Task.CompletedTask;
+    }
+
+    protected override bool TryParseValueFromString(string? value, out string result, out string validationErrorMessage)
+    {
+        result = value ?? string.Empty;
+        validationErrorMessage = string.Empty;
+        return true;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+        {
+            await _module.InvokeVoidAsync("destroy", _editorId);
+            await _module.DisposeAsync();
+        }
+
+        _dotNetObjectReference?.Dispose();
+    }
+
+}

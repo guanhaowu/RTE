@@ -1,0 +1,343 @@
+﻿@page "/editor"
+@rendermode InteractiveServer
+
+@using System.Globalization
+@using RTE.Components.RichTextEditor
+@using RTE.Components.RichTextEditor.Enum
+
+@inject IWebHostEnvironment Environment
+
+<PageTitle>Editor</PageTitle>
+
+<div class="row g-3">
+    <div class="col-12 col-md-3">
+        <label for="editor-language" class="form-label">Editor language</label>
+        <select id="editor-language"
+                class="form-select"
+                value="@_selectedLanguage"
+                @onchange="OnLanguageChanged">
+            @foreach (var language in _availableLanguages)
+            {
+                <option value="@language.Code"
+                        @(language.Code == _selectedLanguage ? "selected" : null)>@language.DisplayName</option>
+            }
+        </select>
+    </div>
+
+    <div class="col offset-md-9"></div>
+
+    <div class="col-6 min-w-0">
+        <div dir="@GetDirection(_selectedLanguage)">
+            <RichTextEditor @bind-Value="_content"
+                            Options="@_editorOptions"/>
+        </div>
+    </div>
+
+    <div class="col-6">
+        <pre>@_content</pre>
+    </div>
+
+    <div class="col-12">
+        @((MarkupString)_content)
+    </div>
+</div>
+
+@code {
+    private string _content = "";
+    private string _selectedLanguage = "en";
+
+    private sealed record EditorLanguage(string Code, string DisplayName);
+
+    private IReadOnlyList<EditorLanguage> _availableLanguages = [];
+    private RichTextEditorOptions _editorOptions { get; set; }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        Console.WriteLine("Rendered...");
+        if(!firstRender) return;
+        _availableLanguages = GetAvailableLanguages();
+        _selectedLanguage = _availableLanguages.Any(lang => lang.Code == "nl") ? "nl" : "en";
+
+        Console.WriteLine("Calling CreateEditorOptions");
+        _editorOptions = CreateEditorOptions(_selectedLanguage);
+        StateHasChanged();
+    }
+
+
+    private void OnLanguageChanged(ChangeEventArgs args)
+    {
+        var language = args.Value?.ToString();
+
+        if (string.IsNullOrWhiteSpace(language) || language == _selectedLanguage) return;
+
+        _selectedLanguage = language;
+        _editorOptions = CreateEditorOptions(_selectedLanguage);
+    }
+
+    private IReadOnlyList<EditorLanguage> GetAvailableLanguages()
+    {
+        var languages = new List<EditorLanguage>
+        {
+            new("en", "English")
+        };
+
+        var languageDirectory = Path.Combine(Environment.WebRootPath, "lib", "HugeRTE", "langs");
+
+        if (!Directory.Exists(languageDirectory)) return languages;
+
+        foreach (var file in Directory.EnumerateFiles(languageDirectory, "*.js"))
+        {
+            var code = Path.GetFileNameWithoutExtension(file);
+            if (string.IsNullOrWhiteSpace(code) || code.Equals("en", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            languages.Add(new EditorLanguage(code, GetLanguageDisplayName(code)));
+        }
+
+        return languages.OrderBy(language => language.DisplayName).ToArray();
+    }
+
+    private static string GetLanguageDisplayName(string code)
+    {
+        try
+        {
+            var culture = CultureInfo.GetCultureInfo(code.Replace("_", "-"));
+            return culture.NativeName;
+        }
+        catch (CultureNotFoundException)
+        {
+            return code;
+        }
+    }
+
+    private static RichTextEditorOptions CreateEditorOptions(string language)
+    {
+        Console.WriteLine("Config created");
+        var toolbar = new List<HugeRteToolbarGroup>
+        {
+            new() { Items = [HugeRteToolbarItem.Undo, HugeRteToolbarItem.Redo] },
+            // new() { Items = [HugeRteToolbarItem.Blocks] },
+            new() { Items = [HugeRteToolbarItem.Bold, HugeRteToolbarItem.Italic, HugeRteToolbarItem.Underline] },
+            new() { Items = [HugeRteToolbarItem.AlignLeft, HugeRteToolbarItem.AlignCenter, HugeRteToolbarItem.AlignRight] },
+            new() { Items = [HugeRteToolbarItem.BulletList, HugeRteToolbarItem.NumberedList] },
+            new() { Items = [HugeRteToolbarItem.Outdent, HugeRteToolbarItem.Indent] },
+            // new() { Items = [HugeRteToolbarItem.Link, HugeRteToolbarItem.Table] },
+        };
+
+        if (IsRightToLeftLanguage(language))
+        {
+            toolbar.Add(new HugeRteToolbarGroup
+            {
+                Items = [HugeRteToolbarItem.LeftToRight, HugeRteToolbarItem.RightToLeft]
+            });
+        }
+
+        return new RichTextEditorOptions
+        {
+            Language = language,
+            LanguageUrl = language.Equals("en", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : $"/lib/HugeRTE/langs/{language}.js",
+            BlockFormats = CreateBlockFormats(language),
+            Statusbar = false,
+            ExtraPlugins = HugeRtePlugins.AdvancedList
+                           | HugeRtePlugins.WordCount
+                           | HugeRtePlugins.AutoLink,
+            Directionality = IsRightToLeftLanguage(language) ? "rtl" : "ltr",
+            Toolbar = toolbar,
+            SelectionQuickbar = true,
+            InsertQuickbar = false,
+            ImageQuickbar = false
+        };
+    }
+
+    private static IReadOnlyList<HugeRteBlockFormatOption> CreateBlockFormats(string language)
+    {
+        return NormalizeLanguageCode(language) switch
+        {
+            "ar" =>
+            [
+                new() { Label = "فقرة", Format = HugeRteFormats.Paragraph },
+                new() { Label = "عنوان 1", Format = HugeRteFormats.Heading1 },
+                new() { Label = "عنوان 2", Format = HugeRteFormats.Heading2 },
+                new() { Label = "عنوان 3", Format = HugeRteFormats.Heading3 },
+                new() { Label = "عنوان 4", Format = HugeRteFormats.Heading4 },
+                new() { Label = "عنوان 5", Format = HugeRteFormats.Heading5 },
+                new() { Label = "عنوان 6", Format = HugeRteFormats.Heading6 },
+            ],
+
+            "de" =>
+            [
+                new() { Label = "Absatz", Format = HugeRteFormats.Paragraph },
+                new() { Label = "Ueberschrift 1", Format = HugeRteFormats.Heading1 },
+                new() { Label = "Ueberschrift 2", Format = HugeRteFormats.Heading2 },
+                new() { Label = "Ueberschrift 3", Format = HugeRteFormats.Heading3 },
+                new() { Label = "Ueberschrift 4", Format = HugeRteFormats.Heading4 },
+                new() { Label = "Ueberschrift 5", Format = HugeRteFormats.Heading5 },
+                new() { Label = "Ueberschrift 6", Format = HugeRteFormats.Heading6 },
+            ],
+
+            "es" =>
+            [
+                new() { Label = "Parrafo", Format = HugeRteFormats.Paragraph },
+                new() { Label = "Encabezado 1", Format = HugeRteFormats.Heading1 },
+                new() { Label = "Encabezado 2", Format = HugeRteFormats.Heading2 },
+                new() { Label = "Encabezado 3", Format = HugeRteFormats.Heading3 },
+                new() { Label = "Encabezado 4", Format = HugeRteFormats.Heading4 },
+                new() { Label = "Encabezado 5", Format = HugeRteFormats.Heading5 },
+                new() { Label = "Encabezado 6", Format = HugeRteFormats.Heading6 },
+            ],
+
+            "fr_fr" =>
+            [
+                new() { Label = "Paragraphe", Format = HugeRteFormats.Paragraph },
+                new() { Label = "Titre 1", Format = HugeRteFormats.Heading1 },
+                new() { Label = "Titre 2", Format = HugeRteFormats.Heading2 },
+                new() { Label = "Titre 3", Format = HugeRteFormats.Heading3 },
+                new() { Label = "Titre 4", Format = HugeRteFormats.Heading4 },
+                new() { Label = "Titre 5", Format = HugeRteFormats.Heading5 },
+                new() { Label = "Titre 6", Format = HugeRteFormats.Heading6 },
+            ],
+
+            "he_il" =>
+            [
+                new() { Label = "פסקה", Format = HugeRteFormats.Paragraph },
+                new() { Label = "כותרת 1", Format = HugeRteFormats.Heading1 },
+                new() { Label = "כותרת 2", Format = HugeRteFormats.Heading2 },
+                new() { Label = "כותרת 3", Format = HugeRteFormats.Heading3 },
+                new() { Label = "כותרת 4", Format = HugeRteFormats.Heading4 },
+                new() { Label = "כותרת 5", Format = HugeRteFormats.Heading5 },
+                new() { Label = "כותרת 6", Format = HugeRteFormats.Heading6 },
+            ],
+
+            "it" =>
+            [
+                new() { Label = "Paragrafo", Format = HugeRteFormats.Paragraph },
+                new() { Label = "Titolo 1", Format = HugeRteFormats.Heading1 },
+                new() { Label = "Titolo 2", Format = HugeRteFormats.Heading2 },
+                new() { Label = "Titolo 3", Format = HugeRteFormats.Heading3 },
+                new() { Label = "Titolo 4", Format = HugeRteFormats.Heading4 },
+                new() { Label = "Titolo 5", Format = HugeRteFormats.Heading5 },
+                new() { Label = "Titolo 6", Format = HugeRteFormats.Heading6 },
+            ],
+
+            "ja" =>
+            [
+                new() { Label = "段落", Format = HugeRteFormats.Paragraph },
+                new() { Label = "見出し 1", Format = HugeRteFormats.Heading1 },
+                new() { Label = "見出し 2", Format = HugeRteFormats.Heading2 },
+                new() { Label = "見出し 3", Format = HugeRteFormats.Heading3 },
+                new() { Label = "見出し 4", Format = HugeRteFormats.Heading4 },
+                new() { Label = "見出し 5", Format = HugeRteFormats.Heading5 },
+                new() { Label = "見出し 6", Format = HugeRteFormats.Heading6 },
+            ],
+
+            "ko_kr" =>
+            [
+                new() { Label = "단락", Format = HugeRteFormats.Paragraph },
+                new() { Label = "제목 1", Format = HugeRteFormats.Heading1 },
+                new() { Label = "제목 2", Format = HugeRteFormats.Heading2 },
+                new() { Label = "제목 3", Format = HugeRteFormats.Heading3 },
+                new() { Label = "제목 4", Format = HugeRteFormats.Heading4 },
+                new() { Label = "제목 5", Format = HugeRteFormats.Heading5 },
+                new() { Label = "제목 6", Format = HugeRteFormats.Heading6 },
+            ],
+
+            "nl" =>
+            [
+                new() { Label = "Alinea", Format = HugeRteFormats.Paragraph },
+                new() { Label = "Kop 1", Format = HugeRteFormats.Heading1 },
+                new() { Label = "Kop 2", Format = HugeRteFormats.Heading2 },
+                new() { Label = "Kop 3", Format = HugeRteFormats.Heading3 },
+                new() { Label = "Kop 4", Format = HugeRteFormats.Heading4 },
+                new() { Label = "Kop 5", Format = HugeRteFormats.Heading5 },
+                new() { Label = "Kop 6", Format = HugeRteFormats.Heading6 },
+            ],
+
+            "pt_pt" =>
+            [
+                new() { Label = "Paragrafo", Format = HugeRteFormats.Paragraph },
+                new() { Label = "Titulo 1", Format = HugeRteFormats.Heading1 },
+                new() { Label = "Titulo 2", Format = HugeRteFormats.Heading2 },
+                new() { Label = "Titulo 3", Format = HugeRteFormats.Heading3 },
+                new() { Label = "Titulo 4", Format = HugeRteFormats.Heading4 },
+                new() { Label = "Titulo 5", Format = HugeRteFormats.Heading5 },
+                new() { Label = "Titulo 6", Format = HugeRteFormats.Heading6 },
+            ],
+
+            "tr" =>
+            [
+                new() { Label = "Paragraf", Format = HugeRteFormats.Paragraph },
+                new() { Label = "Baslik 1", Format = HugeRteFormats.Heading1 },
+                new() { Label = "Baslik 2", Format = HugeRteFormats.Heading2 },
+                new() { Label = "Baslik 3", Format = HugeRteFormats.Heading3 },
+                new() { Label = "Baslik 4", Format = HugeRteFormats.Heading4 },
+                new() { Label = "Baslik 5", Format = HugeRteFormats.Heading5 },
+                new() { Label = "Baslik 6", Format = HugeRteFormats.Heading6 },
+            ],
+
+            "uk" =>
+            [
+                new() { Label = "Абзац", Format = HugeRteFormats.Paragraph },
+                new() { Label = "Заголовок 1", Format = HugeRteFormats.Heading1 },
+                new() { Label = "Заголовок 2", Format = HugeRteFormats.Heading2 },
+                new() { Label = "Заголовок 3", Format = HugeRteFormats.Heading3 },
+                new() { Label = "Заголовок 4", Format = HugeRteFormats.Heading4 },
+                new() { Label = "Заголовок 5", Format = HugeRteFormats.Heading5 },
+                new() { Label = "Заголовок 6", Format = HugeRteFormats.Heading6 },
+            ],
+
+            "zh_cn" =>
+            [
+                new() { Label = "段落", Format = HugeRteFormats.Paragraph },
+                new() { Label = "标题 1", Format = HugeRteFormats.Heading1 },
+                new() { Label = "标题 2", Format = HugeRteFormats.Heading2 },
+                new() { Label = "标题 3", Format = HugeRteFormats.Heading3 },
+                new() { Label = "标题 4", Format = HugeRteFormats.Heading4 },
+                new() { Label = "标题 5", Format = HugeRteFormats.Heading5 },
+                new() { Label = "标题 6", Format = HugeRteFormats.Heading6 },
+            ],
+
+            "zh_tw" =>
+            [
+                new() { Label = "段落", Format = HugeRteFormats.Paragraph },
+                new() { Label = "標題 1", Format = HugeRteFormats.Heading1 },
+                new() { Label = "標題 2", Format = HugeRteFormats.Heading2 },
+                new() { Label = "標題 3", Format = HugeRteFormats.Heading3 },
+                new() { Label = "標題 4", Format = HugeRteFormats.Heading4 },
+                new() { Label = "標題 5", Format = HugeRteFormats.Heading5 },
+                new() { Label = "標題 6", Format = HugeRteFormats.Heading6 },
+            ],
+
+            _ =>
+            [
+                new() { Label = "Paragraph", Format = HugeRteFormats.Paragraph },
+                new() { Label = "Heading 1", Format = HugeRteFormats.Heading1 },
+                new() { Label = "Heading 2", Format = HugeRteFormats.Heading2 },
+                new() { Label = "Heading 3", Format = HugeRteFormats.Heading3 },
+                new() { Label = "Heading 4", Format = HugeRteFormats.Heading4 },
+                new() { Label = "Heading 5", Format = HugeRteFormats.Heading5 },
+                new() { Label = "Heading 6", Format = HugeRteFormats.Heading6 },
+            ]
+        };
+    }
+
+    private static string NormalizeLanguageCode(string language)
+    {
+        return language.Trim().Replace("-", "_").ToLowerInvariant();
+    }
+
+    private static bool IsRightToLeftLanguage(string language)
+    {
+        var normalized = NormalizeLanguageCode(language);
+
+        return normalized is "ar" or "he_il";
+    }
+
+    private static string GetDirection(string language)
+    {
+        return IsRightToLeftLanguage(language) ? "rtl" : "ltr";
+    }
+}

@@ -1,0 +1,24 @@
+﻿.rich-text-editor-container {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.rich-text-editor-container .tox-editor-header {
+    z-index: 0 !important;
+}
+
+.rich-text-editor-container :global(.tox),
+.rich-text-editor-container :global(.tox-hugerte) {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box;
+}
+
+.rich-text-editor-container :global(.tox-toolbar),
+.rich-text-editor-container :global(.tox-toolbar__primary),
+.rich-text-editor-container-editor :global(.tox-toolbar__group) {
+    flex-wrap: wrap;
+}
